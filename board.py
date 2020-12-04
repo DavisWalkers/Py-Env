@@ -183,7 +183,8 @@ class Board(object):
                              or (abs(vertices[vert_1][0] - vertices[vert_2][0]) == 0)) \
                         and ((abs(vertices[vert_1][1] - vertices[vert_2][1]) == 1)
                              or (abs(vertices[vert_1][1] - vertices[vert_2][1]) == 0)):
-                    if (self.board[vertices[vert_1]] != 2) and (self.board[vertices[vert_2]] != 2):
+                    if (self.board[vertices[vert_1]] != 2) and (self.board[vertices[vert_2]] != 2)\
+                            and (self.board[vertices[vert_1]] != 3) and (self.board[vertices[vert_2]] != 3):
                         graph[vert_1, vert_2] = 1
                         graph[vert_2, vert_1] = 1
 

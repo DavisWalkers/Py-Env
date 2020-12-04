@@ -8,6 +8,12 @@ import random
 import numpy as np
 
 
+class BoardException(Exception):
+
+    def __init__(self, msg="Cannot create a board with current conditions"):
+        self.msg = msg
+
+
 class Board(object):
 
     def __init__(self, size=(4, 3), walls=2, pits=1):
@@ -18,52 +24,70 @@ class Board(object):
         self.size = size
         self.board = None
         self.player_pos = None
+        self.end_pos = None
+        self.reward = 0
+        self.max_iter = 10000
 
     def new_board(self):
+        self.done = False
+        self.win = False
         self.board = np.zeros((self.size[0], self.size[1]), dtype=int)
 
-        num_walls = self.walls
-        while num_walls:
-            pos_x = random.randint(0, self.size[1] - 1)
-            pos_y = random.randint(0, self.size[0] - 1)
+        free_cells = [(i, j) for i in range(self.size[0]) for j in range(self.size[1])]
 
-            if self.board[pos_y, pos_x] == 0:
-                self.board[pos_y, pos_x] = 2
-                num_walls -= 1
-            else:
-                continue
+        if len(free_cells) < (self.walls + self.pits + 2):
+            raise BoardException()
 
-        num_pits = self.pits
-        while num_pits:
-            pos_x = random.randint(0, self.size[1] - 1)
-            pos_y = random.randint(0, self.size[0] - 1)
+        player_cell = random.choice(free_cells)
+        self.board[player_cell] = 1
+        free_cells.remove(player_cell)
+        self.player_pos = player_cell
 
-            if self.board[pos_y, pos_x] == 0:
-                self.board[pos_y, pos_x] = 3
-                num_pits -= 1
-            else:
-                continue
+        end_point_cell = random.choice(free_cells)
 
-        player_pos_x = random.randint(0, self.size[1] - 1)
-        player_pos_y = random.randint(0, self.size[0] - 1)
-
-        while self.board[player_pos_y, player_pos_x] != 0:
-            player_pos_x = random.randint(0, self.size[1] - 1)
-            player_pos_y = random.randint(0, self.size[0] - 1)
+        while np.math.dist(player_cell, end_point_cell) < (min(self.size[0], self.size[1]) - 1) / 2:
+            end_point_cell = random.choice(free_cells)
         else:
-            self.board[player_pos_y, player_pos_x] = 1
-            self.player_pos = (player_pos_y, player_pos_x)
+            self.board[end_point_cell] = 4
+            self.end_pos = end_point_cell
+            free_cells.remove(end_point_cell)
 
-        end_pos_x = random.randint(0, self.size[1] - 1)
-        end_pos_y = random.randint(0, self.size[0] - 1)
+        num_iter = 0
+        cell = None
+        for wall in range(self.walls):
+            cell = random.choice(free_cells)
+            self.board[cell] = 2
+            if self.__valid_board__():
+                free_cells.remove(cell)
+                self.board[cell] = 2
+                num_iter = 0
+                continue
+            else:
+                self.board[cell] = 0
+                wall -= 1
+                if wall < 0:
+                    wall = 0
+            num_iter += 1
+            if num_iter > self.max_iter:
+                raise BoardException()
 
-        while (np.sqrt((end_pos_x - player_pos_x) ** 2 +
-                       (end_pos_y - player_pos_y) ** 2) < abs(self.size[0] - self.size[1])) or \
-              (self.board[end_pos_y, end_pos_x] != 0):
-            end_pos_x = random.randint(0, self.size[1] - 1)
-            end_pos_y = random.randint(0, self.size[0] - 1)
-        else:
-            self.board[end_pos_y, end_pos_x] = 4
+        num_iter = 0
+        for pit in range(self.pits):
+            cell = random.choice(free_cells)
+            self.board[cell] = 3
+            if self.__valid_board__():
+                free_cells.remove(cell)
+                self.board[cell] = 3
+                num_iter = 0
+                continue
+            else:
+                self.board[cell] = 0
+                pit -= 1
+                if pit < 0:
+                    pit = 0
+            num_iter += 1
+            if num_iter > self.max_iter:
+                raise BoardException()
 
     def show(self):
         if self.board is not None:
@@ -129,11 +153,58 @@ class Board(object):
                     self.player_pos = (pos_y, pos_x)
                     self.done = True
                     self.win = True
+                    self.reward = 1
                 elif self.board[pos_y, pos_x] == 3:
                     self.board[pos_y, pos_x] = 1
                     self.board[self.player_pos] = 0
                     self.player_pos = (pos_y, pos_x)
                     self.done = True
                     self.win = False
+                    self.reward = -1
 
-        return self.player_pos, self.done, self.win
+        return self.reward, self.done, self.win
+
+    def state(self):
+        return self.player_pos
+
+    def __valid_board__(self):
+        num_vertices = self.size[0] * self.size[1]
+        graph = np.zeros((num_vertices, num_vertices), dtype=int)
+
+        vertices = [(i, j) for i in range(self.size[0]) for j in range(self.size[1])]
+
+        for vert_1 in range(num_vertices - 1):
+            for vert_2 in range(vert_1 + 1, num_vertices):
+                if vert_1 == vert_2:
+                    continue
+                elif (abs((vertices[vert_1][0] + vertices[vert_1][1]) -
+                          (vertices[vert_2][0] + vertices[vert_2][1])) == 1) \
+                        and ((abs(vertices[vert_1][0] - vertices[vert_2][0]) == 1)
+                             or (abs(vertices[vert_1][0] - vertices[vert_2][0]) == 0)) \
+                        and ((abs(vertices[vert_1][1] - vertices[vert_2][1]) == 1)
+                             or (abs(vertices[vert_1][1] - vertices[vert_2][1]) == 0)):
+                    if (self.board[vertices[vert_1]] != 2) and (self.board[vertices[vert_2]] != 2):
+                        graph[vert_1, vert_2] = 1
+                        graph[vert_2, vert_1] = 1
+
+        end_vert = [i for i, vert in enumerate(vertices)
+                    if (vert[0] == self.end_pos[0]) and (vert[1] == self.end_pos[1])][0]
+
+        player_vert = [i for i, vert in enumerate(vertices)
+                       if (vert[0] == self.player_pos[0]) and (vert[1] == self.player_pos[1])][0]
+
+        queue = [player_vert]
+        visited = [player_vert]
+
+        while queue:
+            node = queue.pop(0)
+
+            for vert in range(num_vertices):
+                if vert not in visited:
+                    if graph[vert, node] == 1:
+                        if vert == end_vert:
+                            return True
+                        visited.append(vert)
+                        queue.append(vert)
+
+        return False

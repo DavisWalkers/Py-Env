@@ -20,7 +20,6 @@ class Board(object):
         self.walls = walls
         self.pits = pits
         self.done = False
-        self.win = False
         self.size = size
         self.board = None
         self.player_pos = None
@@ -30,7 +29,6 @@ class Board(object):
 
     def new_board(self):
         self.done = False
-        self.win = False
         self.board = np.zeros((self.size[0], self.size[1]), dtype=int)
 
         free_cells = [(i, j) for i in range(self.size[0]) for j in range(self.size[1])]
@@ -147,25 +145,35 @@ class Board(object):
                     self.board[pos_y, pos_x] = 1
                     self.board[self.player_pos] = 0
                     self.player_pos = (pos_y, pos_x)
+                    self.reward = 0
                 elif self.board[pos_y, pos_x] == 4:
                     self.board[pos_y, pos_x] = 1
                     self.board[self.player_pos] = 0
                     self.player_pos = (pos_y, pos_x)
                     self.done = True
-                    self.win = True
                     self.reward = 1
                 elif self.board[pos_y, pos_x] == 3:
                     self.board[pos_y, pos_x] = 1
                     self.board[self.player_pos] = 0
                     self.player_pos = (pos_y, pos_x)
                     self.done = True
-                    self.win = False
                     self.reward = -1
 
-        return self.reward, self.done, self.win
+        return self.reward, self.done
 
     def state(self):
         return self.player_pos
+
+    def copy(self, other):
+        if (self.size[0] == other.size[0]) and (self.size[1] == other.size[1]):
+            self.board = np.zeros((other.size[0], other.size[1]), dtype=int)
+            for i in range(other.size[0]):
+                for j in range(other.size[1]):
+                    self.board[i, j] = other.board[i, j]
+            self.player_pos = other.player_pos
+            self.end_pos = other.end_pos
+        else:
+            raise BoardException(msg="Sizes are not the same")
 
     def __valid_board__(self):
         num_vertices = self.size[0] * self.size[1]
